@@ -26,5 +26,6 @@ Experiments on self-captured and public dash cam videos show that our method not
 </div>
 
 ## 🗓️ TODO
-- [ ] Relase code
+- [✔] Relase training code
+- [ ] Environment setup and training scripts
 - [ ] Release dataset
