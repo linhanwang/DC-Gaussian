@@ -1,6 +1,6 @@
 <div align="center">
 
-  <h1 align="center">DC-Gaussian: Improving 3D Gaussian Splatting for Reflective Dash Cam Videos</h1>
+  <h1 align="center">[NIPS2024]DC-Gaussian: Improving 3D Gaussian Splatting for Reflective Dash Cam Videos</h1>
 
 ### [Project Page](https://linhanwang.github.io/dcgaussian/)
 
