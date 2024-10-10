@@ -25,7 +25,21 @@ Experiments on self-captured and public dash cam videos show that our method not
 <img width="800" alt="image" src="assets/figure_pipeline.png">
 </div>
 
+## Environment setup
+
+```
+conda env create --file environment.yml
+conda activate dcgaussian
+
+conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit
+
+pip install submodules/simple-knn/
+pip install submodules/diff-gaussian-rasterization/
+pip install ninja git+https://github.com/hturki/tiny-cuda-nn.git@ht/res-grid#subdirectory=bindings/torch
+```
+
 ## 🗓️ TODO
 - [✔] Relase training code
-- [ ] Environment setup and training scripts
+- [✔] Environment setup
+- [ ] Release training, rendering and eval scripts
 - [ ] Release dataset
