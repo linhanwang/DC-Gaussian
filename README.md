@@ -57,3 +57,20 @@ The rendered images will be located in `$output/test/ours_30000/renders/`. In ad
 - [✔] Environment setup
 - [✔] Release training, rendering and eval scripts
 - [✔] Release dataset
+
+## Citation
+
+If you find DC-Gaussian useful in your research or application, please cite using this BibTex:
+
+```
+@article{wang2024dc,
+  title={DC-Gaussian: Improving 3D Gaussian Splatting for Reflective Dash Cam Videos},
+  author={Wang, Linhan and Cheng, Kai and Lei, Shuo and Wang, Shengkun and Yin, Wei and Lei, Chenyang and Long, Xiaoxiao and Lu, Chang-Tien},
+  journal={NeurIPS 2024},
+  year={2024}
+}
+```
+
+## Acknowledgements
+
+We borrowed code from [3DGS](https://github.com/graphdeco-inria/gaussian-splatting), [tinycudann](https://github.com/NVlabs/tiny-cuda-nn) and [SUDS](https://github.com/hturki/suds). Thanks for their contribution to the community.
