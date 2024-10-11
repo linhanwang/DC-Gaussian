@@ -3,10 +3,7 @@ import torch
 from .modules.lpips import LPIPS
 
 
-def lpips(x: torch.Tensor,
-          y: torch.Tensor,
-          net_type: str = 'alex',
-          version: str = '0.1'):
+def lpips(x: torch.Tensor, y: torch.Tensor, net_type: str = 'alex', version: str = '0.1', mask=None):
     r"""Function that measures
     Learned Perceptual Image Patch Similarity (LPIPS).
 
@@ -17,5 +14,5 @@ def lpips(x: torch.Tensor,
         version (str): the version of LPIPS. Default: 0.1.
     """
     device = x.device
-    criterion = LPIPS(net_type, version).to(device)
+    criterion = LPIPS(net_type, version, mask=mask).to(device)
     return criterion(x, y)

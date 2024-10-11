@@ -12,16 +12,17 @@
 import torch
 import numpy as np
 from utils.general_utils import inverse_sigmoid, get_expon_lr_func, build_rotation
-from torch import device, nn
+from torch import nn
 import os
-from kornia import create_meshgrid
-from scene.obstruction_model import obs_dict
 from utils.system_utils import mkdir_p
 from plyfile import PlyData, PlyElement
 from utils.sh_utils import RGB2SH
 from simple_knn._C import distCUDA2
 from utils.graphics_utils import BasicPointCloud
 from utils.general_utils import strip_symmetric, build_scaling_rotation
+from scene.obstruction_filed import obs_dict
+from kornia import create_meshgrid
+
 
 class GaussianModel:
 
@@ -42,10 +43,9 @@ class GaussianModel:
 
         self.rotation_activation = torch.nn.functional.normalize
 
-
-    def __init__(self, sh_degree : int, obs_type: str):
+    def __init__(self, sh_degree: int, win_type: str):
         self.active_sh_degree = 0
-        self.max_sh_degree = sh_degree  
+        self.max_sh_degree = sh_degree
         self._xyz = torch.empty(0)
         self._features_dc = torch.empty(0)
         self._features_rest = torch.empty(0)
@@ -58,7 +58,7 @@ class GaussianModel:
         self.optimizer = None
         self.percent_dense = 0
         self.spatial_lr_scale = 0
-        self.obs_type = obs_type
+        self.win_type = win_type
         self.setup_functions()
 
     def capture(self):
@@ -149,16 +149,19 @@ class GaussianModel:
         self._opacity = nn.Parameter(opacities.requires_grad_(True))
         self.max_radii2D = torch.zeros((self.get_xyz.shape[0]), device="cuda")
 
-        # initial obstruction model
+        # virtual window
         H, W = image_size
-        opacity_map = 0.05 * torch.rand([1, H, W], dtype=torch.float, device='cuda')
-        self.opacity_map = nn.Parameter(opacity_map.requires_grad_(True))
-        
-        self.obs_model: nn.Module = obs_dict[self.obs_type]().to('cuda')
-        
+        alpha = 0.05 * torch.rand([1, *image_size], dtype=torch.float, device='cuda')
+        self._alpha = nn.Parameter(alpha.requires_grad_(True))
+
+        if self.win_type != 'win':
+            self.obs_field: nn.Module = obs_dict[self.win_type]().to('cuda')
+        else:
+            self.obs_field: nn.Module = obs_dict[self.win_type](H, W)
+
         grid = create_meshgrid(H, W, normalized_coordinates=False)[0]
         i, j = grid.unbind(-1)
-        self.coords = torch.stack([i, j, torch.ones_like(i)], -1).to('cuda')
+        self.coords = torch.stack([i, j, torch.ones_like(i)], -1).to('cuda')  # (H, W, 3)
 
     def training_setup(self, training_args):
         self.percent_dense = training_args.percent_dense
@@ -172,8 +175,8 @@ class GaussianModel:
             {'params': [self._opacity], 'lr': training_args.opacity_lr, "name": "opacity"},
             {'params': [self._scaling], 'lr': training_args.scaling_lr, "name": "scaling"},
             {'params': [self._rotation], 'lr': training_args.rotation_lr, "name": "rotation"},
-            {'params': [self.opacity_map], 'lr': training_args.opacity_lr, "name": "dc_opacity"},
-            {'params': [*self.obs_model.parameters(recurse=True)], 'lr': training_args.obstruction_lr, "name": "dc_obs_model"},
+            {'params': [self._alpha], 'lr': training_args.alpha_lr, "name": "window_alpha"},
+            {'params': [*self.obs_field.parameters(recurse=True)], 'lr': training_args.obs_lr, "name": "window_obs"},
         ]
 
         self.optimizer = torch.optim.Adam(l, lr=0.0, eps=1e-15)
@@ -203,9 +206,9 @@ class GaussianModel:
         for i in range(self._rotation.shape[1]):
             l.append('rot_{}'.format(i))
         return l
-    
-    def save_obs_model(self, path):
-        torch.save({'opacity_map': self.opacity_map, 'obs_model': self.obs_model.state_dict()}, path)
+
+    def save_window(self, path):
+        torch.save({'alpha': self._alpha, 'obs_field': self.obs_field.state_dict()}, path)
 
     def save_ply(self, path):
         mkdir_p(os.path.dirname(path))
@@ -230,27 +233,46 @@ class GaussianModel:
         opacities_new = inverse_sigmoid(torch.min(self.get_opacity, torch.ones_like(self.get_opacity)*0.01))
         optimizable_tensors = self.replace_tensor_to_optimizer(opacities_new, "opacity")
         self._opacity = optimizable_tensors["opacity"]
-    
+
     def adjust_image(self, image, T):
-        obs = self.obs_model(self.coords.view(-1, 3), T).view(self.coords.size()).permute(2, 0, 1)
+        if self.win_type == 'win':
+            obs = self.obs_field()
+        else:
+            obs = self.obs_field(self.coords.view(-1, 3), T).view(self.coords.size()).permute(2, 0, 1)
         tran = image
-        adjusted = (1. - torch.relu(self.opacity_map)) * tran + obs
+        adjusted = (1. - torch.relu(self._alpha)) * tran + obs
         return tran, obs, adjusted
 
-    def opacity_map_loss(self):
-        return torch.mean(torch.relu(self.opacity_map))
+    def win_loss(self):
+        return torch.mean(torch.relu(self._alpha))
+
+    def depth_loss(self, dyn_depth, gt_depth):
+        t_d = torch.median(dyn_depth)
+        s_d = torch.mean(torch.abs(dyn_depth - t_d))
+        dyn_depth_norm = (dyn_depth - t_d) / s_d
+
+        t_gt = torch.median(gt_depth)
+        s_gt = torch.mean(torch.abs(gt_depth - t_gt))
+        gt_depth_norm = (gt_depth - t_gt) / s_gt
+
+        depth_loss_arr = (dyn_depth_norm - gt_depth_norm) ** 2
+        depth_loss_arr[depth_loss_arr > torch.quantile(depth_loss_arr, 0.8)] = 0
+        return depth_loss_arr.mean()
 
     def load_pt(self, path):
         checkpoint = torch.load(path)
-        self.opacity_map = checkpoint['opacity_map']
-        self.obs_model = obs_dict[self.obs_type]().to('cuda')
-        self.obs_model.load_state_dict(checkpoint['obs_model'])
+        self._alpha = checkpoint['alpha']
+        if self.win_type == 'win':
+            self.obs_field = obs_dict[self.win_type](*self._alpha.size()[-2:]).to('cuda')
+        else:
+            self.obs_field = obs_dict[self.win_type]().to('cuda')
+        self.obs_field.load_state_dict(checkpoint['obs_field'])
 
-        _, H, W = self.opacity_map.size()
+        _, H, W = self._alpha.size()
         grid = create_meshgrid(H, W, normalized_coordinates=False)[0]
         i, j = grid.unbind(-1)
         self.coords = torch.stack([i, j, torch.ones_like(i)], -1).to('cuda')  # (H, W, 3)
-    
+
     def load_ply(self, path):
         plydata = PlyData.read(path)
 
@@ -312,7 +334,7 @@ class GaussianModel:
     def _prune_optimizer(self, mask):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            if group['name'].startswith('dc_'):
+            if group['name'].startswith('window'):
                 continue
             stored_state = self.optimizer.state.get(group['params'][0], None)
             if stored_state is not None:
@@ -348,7 +370,7 @@ class GaussianModel:
     def cat_tensors_to_optimizer(self, tensors_dict):
         optimizable_tensors = {}
         for group in self.optimizer.param_groups:
-            if group['name'].startswith('dc_'):
+            if group['name'].startswith('window'):
                 continue
             assert len(group["params"]) == 1
             extension_tensor = tensors_dict[group["name"]]

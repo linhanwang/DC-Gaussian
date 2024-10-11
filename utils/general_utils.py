@@ -14,6 +14,8 @@ import sys
 from datetime import datetime
 import numpy as np
 import random
+import cv2
+import re
 
 def inverse_sigmoid(x):
     return torch.log(x/(1-x))
@@ -23,6 +25,8 @@ def PILtoTorch(pil_image, resolution):
     resized_image = torch.from_numpy(np.array(resized_image_PIL)) / 255.0
     if len(resized_image.shape) == 3:
         return resized_image.permute(2, 0, 1)
+    elif len(resized_image.shape) == 2:
+        return resized_image
     else:
         return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
 
@@ -131,3 +135,80 @@ def safe_state(silent):
     np.random.seed(0)
     torch.manual_seed(0)
     torch.cuda.set_device(torch.device("cuda:0"))
+
+def read_pfm(path):
+    """Read pfm file.
+
+    Args:
+        path (str): path to file
+
+    Returns:
+        tuple: (data, scale)
+    """
+    with open(path, "rb") as file:
+
+        color = None
+        width = None
+        height = None
+        scale = None
+        endian = None
+
+        header = file.readline().rstrip()
+        if header.decode("ascii") == "PF":
+            color = True
+        elif header.decode("ascii") == "Pf":
+            color = False
+        else:
+            raise Exception("Not a PFM file: " + path)
+
+        dim_match = re.match(r"^(\d+)\s(\d+)\s$", file.readline().decode("ascii"))
+        if dim_match:
+            width, height = list(map(int, dim_match.groups()))
+        else:
+            raise Exception("Malformed PFM header.")
+
+        scale = float(file.readline().decode("ascii").rstrip())
+        if scale < 0:
+            # little-endian
+            endian = "<"
+            scale = -scale
+        else:
+            # big-endian
+            endian = ">"
+
+        data = np.fromfile(file, endian + "f")
+        shape = (height, width, 3) if color else (height, width)
+
+        data = np.reshape(data, shape)
+        data = np.flipud(data)
+
+        return data, scale
+
+
+def write_depth(path, depth, bits=1, absolute_depth=False):
+    """Write depth map to pfm and png file.
+
+    Args:
+        path (str): filepath without extension
+        depth (array): depth
+    """
+    if absolute_depth:
+        out = depth
+    else:
+        depth_min = depth.min()
+        depth_max = depth.max()
+
+        max_val = (2 ** (8 * bits)) - 1
+
+        if depth_max - depth_min > np.finfo("float").eps:
+            out = max_val * (depth - depth_min) / (depth_max - depth_min)
+        else:
+            out = np.zeros(depth.shape, dtype=depth.dtype)
+
+    if bits == 1:
+        cv2.imwrite(path + ".png", out.astype("uint8"), [cv2.IMWRITE_PNG_COMPRESSION, 0])
+    elif bits == 2:
+        cv2.imwrite(path + ".png", out.astype("uint16"), [cv2.IMWRITE_PNG_COMPRESSION, 0])
+
+    return
+

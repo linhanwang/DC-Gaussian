@@ -3,7 +3,7 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
-# This software is free for non-commercial, research and evaluation use 
+# This software is free for non-commercial, research and evaluation use
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
@@ -41,10 +41,15 @@ class Scene:
         self.test_cameras = {}
 
         if os.path.exists(os.path.join(args.source_path, "sparse")):
-            scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path, args.images, args.eval)
+            scene_info = sceneLoadTypeCallbacks["Colmap"](args.source_path,
+                                                          args.images,
+                                                          args.eval,
+                                                          depth_folder=args.depth_folder)
         elif os.path.exists(os.path.join(args.source_path, "transforms_train.json")):
             print("Found transforms_train.json file, assuming Blender data set!")
-            scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path, args.white_background, args.eval)
+            scene_info = sceneLoadTypeCallbacks["Blender"](args.source_path,
+                                                           args.white_background,
+                                                           args.eval)
         else:
             assert False, "Could not recognize scene type!"
 
@@ -82,7 +87,8 @@ class Scene:
             self.gaussians.load_pt(os.path.join(self.model_path,
                                                            "point_cloud",
                                                            "iteration_" + str(self.loaded_iter),
-                                                           "obs_model.pt"))
+                                                           "window.pt"))
+            self.gaussians.spatial_lr_scale = self.cameras_extent
         else:
             cam = self.train_cameras[1.0][0]
             self.gaussians.create_from_pcd(scene_info.point_cloud, self.cameras_extent, (cam.image_height, cam.image_width))
@@ -90,7 +96,7 @@ class Scene:
     def save(self, iteration):
         point_cloud_path = os.path.join(self.model_path, "point_cloud/iteration_{}".format(iteration))
         self.gaussians.save_ply(os.path.join(point_cloud_path, "point_cloud.ply"))
-        self.gaussians.save_obs_model(os.path.join(point_cloud_path, "obs_model.pt"))
+        self.gaussians.save_window(os.path.join(point_cloud_path, "window.pt"))
 
     def getTrainCameras(self, scale=1.0):
         return self.train_cameras[scale]

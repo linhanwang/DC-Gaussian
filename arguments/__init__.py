@@ -54,7 +54,13 @@ class ModelParams(ParamGroup):
         self._white_background = False
         self.data_device = "cuda"
         self.eval = False
-        self.obs_type = "iom" # iom, nom
+        # Ablation
+        self.depth_folder = 'kitti_depth'
+        self.road = False
+        self.mono_depth = False
+        self.hard_soft_depth = False
+        self.exclusion = False
+        self.win_type = 'iom'  # iom, nom 
         super().__init__(parser, "Loading Parameters", sentinel)
 
     def extract(self, args):
@@ -80,11 +86,21 @@ class OptimizationParams(ParamGroup):
         self.opacity_lr = 0.05
         self.scaling_lr = 0.005
         self.rotation_lr = 0.001
-        self.opacity_lr = 0.001
-        self.obstruction_lr = 0.001
+        
+        self.alpha_lr = 0.001
+        self.obs_lr = 0.001
+        self.sky_lr = 0.001
         self.percent_dense = 0.01
         self.lambda_dssim = 0.2
-        self.lambda_opacity = 0.01
+        self.lambda_win = 0.01
+        self.lambda_sky = 0.01
+        self.lambda_depth = 0.01
+        self.lambda_road = 1.0
+        self.lambda_excl = 1.0
+        self.soft_depth_start = 1000
+        self.hard_depth_start = 0
+        self.error_tolerance = 0.2
+
         self.densification_interval = 100
         self.opacity_reset_interval = 3000
         self.densify_from_iter = 500

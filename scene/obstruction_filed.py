@@ -3,10 +3,8 @@ import torch
 from torch import nn
 
 
-class NOM(nn.Module):
-    """
-    Naive obstruction modeling
-    """
+class NOMObsField(nn.Module):
+
     def __init__(self,
                  num_layers: int = 2,
                  hidden_dim: int = 64,
@@ -45,15 +43,13 @@ class NOM(nn.Module):
 
     def forward(self, coords: torch.Tensor, T: torch.Tensor) -> torch.Tensor:
         embedding = self.encoding(coords)
+        # t = T.unsqueeze(0).repeat(embedding.size()[0], 1)
 
         return self.mlp_head(embedding)
 
 
-class IOM(nn.Module):
-    """
-    Illumination-aware obstruction modeling
-    """
-    
+class IOMObsField(nn.Module):
+
     def __init__(self,
                  num_layers: int = 2,
                  hidden_dim: int = 64,
@@ -74,7 +70,7 @@ class IOM(nn.Module):
                                           'include_static': False
                                       })
 
-        self.omega_head = tcnn.Network(
+        self.gamma_head = tcnn.Network(
             n_input_dims=features_per_level * num_levels + 3,
             n_output_dims=features_per_level * num_levels,
             network_config={
@@ -115,12 +111,24 @@ class IOM(nn.Module):
         t = T.unsqueeze(0).repeat(embedding.size()[0], 1)
         cat_feat = torch.cat([embedding, t], -1)
 
-        gamma = self.omega_head(cat_feat)
+        gamma = self.gamma_head(cat_feat)
         beta = self.beta_head(cat_feat)
         return self.mlp_head(gamma * embedding + beta)
 
 
+class WinObsField(nn.Module):
+
+    def __init__(self, H: int, W: int) -> None:
+        super().__init__()
+        obs = 0.05 * torch.rand([3, H, W], dtype=torch.float, device='cuda')
+        self._obs = nn.Parameter(obs.requires_grad_(True))
+
+    def forward(self) -> torch.Tensor:
+        return torch.relu(self._obs)
+
+
 obs_dict = {
-    'nom': NOM,
-    'iom': IOM,
+    'nom': NOMObsField,
+    'iom': IOMObsField,
+    'win': WinObsField,
 }

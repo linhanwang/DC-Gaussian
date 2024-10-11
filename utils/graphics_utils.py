@@ -3,7 +3,7 @@
 # GRAPHDECO research group, https://team.inria.fr/graphdeco
 # All rights reserved.
 #
-# This software is free for non-commercial, research and evaluation use 
+# This software is free for non-commercial, research and evaluation use
 # under the terms of the LICENSE.md file.
 #
 # For inquiries contact  george.drettakis@inria.fr
@@ -13,6 +13,7 @@ import torch
 import math
 import numpy as np
 from typing import NamedTuple
+from kornia import create_meshgrid
 
 class BasicPointCloud(NamedTuple):
     points : np.array
@@ -48,6 +49,25 @@ def getWorld2View2(R, t, translate=np.array([.0, .0, .0]), scale=1.0):
     Rt = np.linalg.inv(C2W)
     return np.float32(Rt)
 
+
+def get_dirs(H, W, fovX, fovY, R, t):
+    fx = fov2focal(fovX, W)
+    fy = fov2focal(fovY, H)
+    cx = 0.5 * W
+    cy = 0.5 * H
+
+    w2c = getWorld2View(R, t)
+    c2w = np.linalg.inv(w2c)
+
+    grid = create_meshgrid(H, W, normalized_coordinates=False)[0]
+    i, j = grid.unbind(-1)
+    directions = torch.stack(
+        [(i - cx) / fx, -(j - cy) / fy, -torch.ones_like(i)], -1)  # (H, W, 3)
+    rays_d = directions @ c2w[:3, :3].T  # (H, W, 3)
+    rays_d = rays_d / torch.norm(rays_d, dim=-1, keepdim=True)
+    return rays_d
+
+
 def getProjectionMatrix(znear, zfar, fovX, fovY):
     tanHalfFovY = math.tan((fovY / 2))
     tanHalfFovX = math.tan((fovX / 2))
@@ -75,3 +95,32 @@ def fov2focal(fov, pixels):
 
 def focal2fov(focal, pixels):
     return 2*math.atan(pixels/(2*focal))
+
+def get_proj_matrix(K, image_size, znear=.01, zfar=1000.):
+    fx = K[0,0]
+    fy = K[1,1]
+    cx = K[0,2]
+    cy = K[1,2]
+    width, height = image_size
+    m = np.zeros((4, 4))
+    m[0][0] = 2.0 * fx / width
+    m[0][1] = 0.0
+    m[0][2] = 0.0
+    m[0][3] = 0.0
+
+    m[1][0] = 0.0
+    m[1][1] = 2.0 * fy / height
+    m[1][2] = 0.0
+    m[1][3] = 0.0
+
+    m[2][0] = 1.0 - 2.0 * cx / width
+    m[2][1] = 2.0 * cy / height - 1.0
+    m[2][2] = (zfar + znear) / (znear - zfar)
+    m[2][3] = -1.0
+
+    m[3][0] = 0.0
+    m[3][1] = 0.0
+    m[3][2] = 2.0 * zfar * znear / (znear - zfar)
+    m[3][3] = 0.0
+
+    return m.T

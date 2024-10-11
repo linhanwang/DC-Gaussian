@@ -38,8 +38,22 @@ pip install submodules/diff-gaussian-rasterization/
 pip install ninja git+https://github.com/hturki/tiny-cuda-nn.git@ht/res-grid#subdirectory=bindings/torch
 ```
 
+## Dataset 
+
+Data used in our work can be downloaded from [here](https://zenodo.org/records/13916656). They are in colmap format.
+
+## Train and evaluation
+
+```
+python train.py -s $dataset -m $output --eval -r 1 --win_type iom --position_lr_init 0.00008  --position_lr_final 0.000008 --scaling_lr 0.005 --percent_dense 0.0005 --densify_until_iter 20000
+python render.py -s $dataset -m $output --skip_train
+python metrics.py -m $output
+```
+
+The rendered images will be located in `$output/test/ours_30000/renders/`. In addition to the composed images, the rendering process will also produce obstruction, transmission, depth, and opacity maps.
+
 ## 🗓️ TODO
 - [✔] Relase training code
 - [✔] Environment setup
-- [ ] Release training, rendering and eval scripts
-- [ ] Release dataset
+- [✔] Release training, rendering and eval scripts
+- [✔] Release dataset
