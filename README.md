@@ -64,9 +64,11 @@ If you find DC-Gaussian useful in your research or application, please cite usin
 
 ```
 @article{wang2024dc,
-  title={DC-Gaussian: Improving 3D Gaussian Splatting for Reflective Dash Cam Videos},
+  title={Dc-gaussian: Improving 3d gaussian splatting for reflective dash cam videos},
   author={Wang, Linhan and Cheng, Kai and Lei, Shuo and Wang, Shengkun and Yin, Wei and Lei, Chenyang and Long, Xiaoxiao and Lu, Chang-Tien},
-  journal={NeurIPS 2024},
+  journal={Advances in Neural Information Processing Systems},
+  volume={37},
+  pages={99898--99920},
   year={2024}
 }
 ```
